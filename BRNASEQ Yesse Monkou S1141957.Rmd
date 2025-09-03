@@ -1,0 +1,566 @@
+---
+title: "BRNASEQ Yesse Monkou S1141957"
+author: "Yesse Monkou"
+date: "2024-06-14"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: 
+    fig_width: 5
+    fig_height: 5
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install_if_missing <- function(packages) {
+  for (package in packages) {
+    if (!require(package, character.only = TRUE)) {
+      BiocManager::install(package, ask = FALSE)
+      library(package, character.only = TRUE)
+    }
+  }
+}
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+cran_packages <- c("ggplot2", "dplyr", "ggrepel", "pheatmap", "tidyr", "tibble", "knitr", "rmarkdown", "tinytex")
+bioc_packages <- c("DESeq2", "clusterProfiler", "org.Hs.eg.db", "DOSE", "edgeR", "biomaRt", "fgsea", "enrichplot")
+
+
+install_if_missing(cran_packages)
+install_if_missing(bioc_packages)
+
+
+library(tinytex)
+library(rmarkdown)
+library(DESeq2)
+library(ggplot2)
+library(dplyr)
+library(ggrepel)
+library(pheatmap)
+library(BiocManager)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(DOSE)
+library(edgeR)
+library(biomaRt)
+library(tidyr)
+library(tibble)
+library(enrichplot)
+library(knitr)
+library(fgsea)
+```
+
+# Deelopdracht 1
+
+## Flowchart
+
+**chart not available**
+
+### Wetlab
+
+Stap 1: mRNA isolatie Isolatie van messenger RNA (mRNA) uit celmonsters.
+mRNA wordt geïsoleerd omdat het de directe transcripten zijn van genen
+en dus een goed beeld geven van welke genen actief zijn in een cel op
+een bepaald moment.(1)
+
+Stap 2: cDNA Synthese Omzetting van mRNA naar complementair DNA (cDNA)
+met behulp van een reverse transcriptase enzym. cDNA is stabieler dan
+mRNA en gemakkelijker te amplificeren, waardoor het geschikt is voor
+downstream analyse.(1)
+
+Stap 3: Library Prep (inclusief adapters) Voorbereiding van de
+cDNA-monsters voor sequencing door toevoeging van adapters en
+amplificatie. Adapters zijn korte DNA-sequenties die aan het uiteinde
+van elk cDNA-fragment worden toegevoegd, waardoor het mogelijk wordt om
+de sequenties te binden aan de sequencer en efficiënt te
+amplificeren.(1)
+
+Stap 4: Sequencing Het uitvoeren van de sequentiebepaling van de
+voorbereide cDNA-monsters om de nucleotidenvolgorde te bepalen. Hierbij
+worden de cDNA-fragmenten afzonderlijk gelezen en hun sequenties
+vastgelegd.(1)
+
+### Downstream analyse
+
+Stap 1: Mapping Toewijzen van de sequencede reads aan een
+referentiegenoom of referentietranscriptoom om de oorsprong van elke
+read te bepalen. Dit wordt gedaan om te achterhalen waar elk fragment
+van het sequencede mRNA vandaan komt. Echter is het gebruik van
+referentie niet essentieel. Indien er geen referentie beschikbaar is,
+kan er ook gebruik gemaakt worden van de novo.(2)
+
+Stap 2: Summarization Samenvatten van de mapping-resultaten om de
+expressieniveaus van elk gen te bepalen. Hierbij wordt bepaald hoe vaak
+elk gen voorkomt in de sequencede reads, wat een indicatie geeft van de
+activiteit van dat gen.(2)
+
+Stap 3: Normalization Normalisatie van de read counts om verschillen in
+sequencing-diepte en andere technische variaties tussen monsters te
+corrigeren. Dit zorgt ervoor dat de data vergelijkbaar is tussen
+verschillende monsters.(2)
+
+Stap 4: Differential Gene Expression (DGE) Analyse Het identificeren van
+genen die differentieel tot expressie worden gebracht tussen
+verschillende experimentele omstandigheden. Dit helpt bij het
+identificeren van genen die betrokken zijn bij specifieke biologische
+processen of responsen.(2)
+
+Stap 5: Functionele analyse Om inzicht te krijgen in de biologische
+betekenis van de differentieel tot expressie gebrachte genen, worden
+functionele analyses uitgevoerd, zoals pathway-analyse of GO-term
+analyse. Dit helpt bij het begrijpen van de biologische processen die
+worden beïnvloed door de waargenomen veranderingen in genexpressie.(2)
+
+# Deelopdracht 2
+
+## Onderzoeksvraag
+
+Wat zijn de genen die differentieel tot expressie komen tussen luminaal
+(LUM) borstkankersubtypen vóór en na chemotherapiebehandeling, en welke
+biologische processen of signaalroutes zijn geassocieerd met deze
+differentiële expressie?
+
+## Sample Information
+
+De dataset bestaat uit 8 samples. De samples zijn afkomstig van tumoren
+van borstkankerpatiënten behandeld met chemotherapie. Sommige samples
+zijn genomen voorafgaand aan de behandeling, andere na afloop
+(metadata9.txt, voor.na). In deze dataset komt alleen de subtype LUM
+voor. In de tabel countdata9.txt staat de activiteit van 39117 genen per
+patiënt. In de tabel featureData.txt staan al verschillende gegevens
+over al deze 39117 genen. Geen van de tabellen bevat missing values.
+
+```{r echo=FALSE}
+countdata <- read.table("countdata9.txt", header=TRUE)
+metadata <- read.table("metadata9.txt", header=TRUE)
+featuredata <- read.table("featureData.txt", header=TRUE, sep="\t", quote="")
+
+kable(head(countdata), caption = "Eerste 6 regels van countdata9.txt tabel")
+```
+
+Het ensembl_gene_id geeft, zoals de naam al zegt, het ensembl gen-id
+weer. De andere kolommen geven het aantal reads van een gen per sample
+weer.
+
+```{r echo=FALSE}
+kable(head(featuredata), caption = "Eerste 6 regels van featuredata.txt tabel")
+```
+
+Deze tabel geeft informatie over alle genen die voor kunnen komen in de
+countdata9 tabel. Het gaat hier om het type gen, chromosoomnummer,
+begin- en eindpositie op het humane genoom, het gensymbool en een korte
+beschrijving van het gen.
+
+```{r echo=FALSE}
+kable(metadata, caption = "Metadata9.txt tabel")
+```
+
+In deze tabel krijgen we informatie over de conditie van de samples. De
+twee onafhankelijke variabelen zijn voor.na en type. In deze dataset
+hebben alle samples dezelfde type borstkanker. Er zijn vier samples
+genomen voor behandeling een vier samples na behandeling.
+
+## Experimenteel Design
+
+Zoals getoond zitten de onafhankelijke variabelen in metadata9.txt. Het
+gaat hier om de kolom voor.na die als enige verschil toont. Daarom wordt
+dit ook de conditie in het experimenteel design.
+
+```{r echo=FALSE}
+metadata_ed <- metadata[, !names(metadata) %in% "type"]
+metadata_ed$voor.na <- ifelse(metadata$voor.na == "voor", 1, 0)
+metadata_ed$StudyID <- 1
+
+kable(metadata_ed, caption = "Experimenteel Design")
+```
+
+# Deelopdracht 3
+
+## Overall count
+
+Zoals we zien hebben de samples X2_97_S en X12_2653_S een opvallend
+hogere totale count dan de andere samples. De hoge count valt niet te
+verklaren door de conditie voor.na, want dan zouden de andere twee
+"na"-samples ook een hogere totale count moeten hebben. De meest
+logische verklaring is technische variatie. En dit wordt verholpen door
+middel van normalisatie.
+
+```{r echo=FALSE}
+barplot(apply(countdata, 2, sum), 
+        las=2, 
+        main="Som van counts per sample", 
+        ylab="Totale reads", 
+        xlab="Sample",
+        col = "skyblue")
+```
+
+## Data opschonen
+
+### Missing values
+
+Zoals eerder genoemd zitten er in geen van de bestanden missing values.
+Er hoeft dus ook geen strategie hiervoor bedacht te worden.
+
+### Outliers
+
+Het onderzoek gaat over het verschil in expressie van genen. Hierbij
+worden extreme waardes juist gewaardeerd, want daardoor kan
+differentiatie worden aangetoond. Op deze grond is ervoor gekozen om
+niks te doen met vermeende outliers.
+
+### Filtering van ruis
+
+Veel van de genen die in de gegeven count-tabel staan, komen nauwelijks
+tot expressie. Om deze ruis weg te nemen uit het onderzoek. Er wordt per
+patiënt gekeken of het gen een count heeft boven de 10. Als het
+desbetreffende gen bij geen enkele patiënt een count haalt boven de 10,
+dan wordt dit gen niet meegenomen in het verdere onderzoek. Door deze
+strategie is de count-tabel gehalveerd in rijen. Maar als we naar het
+percentage van de counts kijken, zien we dat er maximaal 0,1% van de
+totale counts per sample worden verwijderd.
+
+```{r echo=TRUE}
+filtered_counts <- countdata %>%
+  filter(apply(., 1, function(row) any(row > 10)))
+```
+
+```{r echo=FALSE}
+print(paste("Aantal rijen van countdata voor de filtering: ", nrow(countdata)))
+print(paste("Aantal rijen van countdata na de filtering: ", nrow(filtered_counts)))
+countdata_som <- apply(countdata, 2, sum)
+filtered_counts_som <- apply(filtered_counts, 2, sum)
+percentage_gefilterd <- (1 - (filtered_counts_som / countdata_som)) * 100
+
+grafiek_data <- data.frame(
+  Sample = names(countdata_som),
+  Percentage_gefilterd = percentage_gefilterd
+)
+barplot(grafiek_data$Percentage_gefilterd, 
+        names.arg = grafiek_data$Sample, 
+        ylim = c(0, 0.1), 
+        main = "Percentage gefilterde counts per sample",
+        xlab = "Sample",
+        ylab = "Percentage gefilterd (%)",
+        col = "skyblue",  
+        las = 2)  
+```
+
+### Normalisatie
+
+De normalisatie voor DESEQ wordt later gedaan met behulp van de "Median
+of Ratio's" methode van DESeq2. Voor de exploratie wordt de "TMM"
+methode gebruikt.
+
+```{r echo=TRUE}
+metadata_countdata <- metadata[colnames(filtered_counts), ]
+group <- factor(metadata_countdata$voor.na)
+dge <- DGEList(counts = filtered_counts, group = group)
+dge <- calcNormFactors(dge, method = "TMM")
+normalized_counts <- cpm(dge, normalized.lib.sizes = TRUE)
+```
+
+En dan ziet de som van de counts er als volgt uit:
+
+```{r echo=FALSE}
+barplot(apply(normalized_counts, 2, sum), 
+        las=2, 
+        main="Som van genormaliseerde counts per sample", 
+        ylab="Totale reads", 
+        xlab="Patiënt",
+        col = "skyblue")
+
+```
+
+## PCA
+
+Bij het analyseren van de PCA, komt naar voren dat er twee datapunten
+zijn die overduidelijk buiten de clusters vallen. X29_3001_B en X2_97_S
+zijn de StudyID’s van deze punten. Als er meer samples waren, zouden
+deze twee losse samples wellicht verwijderd kunnen worden. Maar omdat er
+maar beperkt aantal samples beschikbaar zijn, wordt er toch voor gekozen
+deze samples te behouden.
+
+```{r echo=FALSE}
+tmm_counts <- log(normalized_counts + 1)
+pca_res <- prcomp(t(tmm_counts), scale. = TRUE)
+pca_data <- as.data.frame(pca_res$x)
+pca_data$voor.na <- metadata$voor.na
+pca_data$sample <- rownames(pca_data) 
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = voor.na, label = paste(sample, "\n(", round(PC1, 2), ", ", round(PC2, 2), ")", sep = ""))) +
+  geom_point(size = 3) +
+  geom_text_repel() +
+  labs(title = "PCA Plot") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+```
+
+# Deelopdracht 4
+
+## DGE LIJST
+
+De uitkomst van de DGE-analyse wordt hier getoond getoond. We zien de
+zes meest prominente genen als het gaat om borstkanker behandeling.
+
+Wat betekenen de kolomnamen?
+
+-   **baseMean**: Dit is het gemiddelde aantal lezingen (counts) voor
+    een gen over alle monsters, zonder rekening te houden met groepen of
+    voorwaarden.
+
+-   **log2FoldChange**: Dit is de log2 van de vouwverandering (fold
+    change) in genexpressie tussen twee groepen of voorwaarden. Het
+    geeft aan hoeveel keer hoger of lager de genexpressie is tussen de
+    groepen.
+
+-   **lfcSE**: Dit is de standaardfout van de log2 vouwverandering.
+
+-   **stat**: Dit is de statistische waarde die wordt gebruikt om te
+    bepalen of de vouwverandering significant is.
+
+-   **pvalue**: Dit is de p-waarde die de mate van statistische
+    significantie aangeeft van de vouwverandering.
+
+-   **padj**: Dit zijn de aangepaste p-waarden (gecorrigeerd voor
+    meervoudige testen), wat aangeeft welke p-waarden significant zijn
+    na correctie.
+
+De lijst is gesorteerd op basis van de gecorrigeerde p-waarde (FDR) en
+de waarde van de log2 fold change (log2FoldChange). Eerst worden de
+genen gesorteerd op FDR (ook wel padj) in oplopende volgorde om de meest
+significante genen bovenaan te krijgen. Vervolgens, binnen de genen met
+dezelfde FDR, worden de genen verder gesorteerd op de absolute waarde
+van log2FoldChange in aflopende volgorde. Dit zorgt ervoor dat genen met
+de grootste veranderingen in expressie, bovenaan de lijst staan.
+
+```{r echo=TRUE}
+dds <- DESeqDataSetFromMatrix(countData = filtered_counts, 
+                              colData = metadata, 
+                              design = ~ voor.na)
+
+dds <- DESeq(dds)
+res <- results(dds, alpha=0.05)
+res_df <- as.data.frame(res)
+res_df$Gene <- rownames(res_df)
+res_df <- res_df[order(res_df$padj, -abs(res_df$log2FoldChange)), ]
+
+kable(head(res_df), caption = "Top 6 prominente genen bij borstkanker behandeling, gesorteerd op de padj waarde")
+```
+
+## Satistiek
+
+In het DESeq2-framework wordt gekeken naar verschillen in genexpressie
+door een speciaal model op de gegevens toe te passen. Eerst wordt een
+dataset gemaakt, genaamd 'dds', van de ruwe gegevens, inclusief de
+tellingen van genen en andere informatie. Daarin wordt ook aangegeven
+welke factoren belangrijk zijn voor de vergelijkingen, zoals
+verschillende condities of behandelingen.
+
+Vervolgens wordt dit model gebruikt om te zien welke genen anders tot
+expressie komen tussen de verschillende groepen monsters. DESeq2
+berekent dan log2-fold veranderingen en p-waarden voor elk gen om te
+bepalen hoeveel het verschil in expressie is en of dit verschil
+statistisch significant is.
+
+Het model in DESeq2 gebruikt een bepaalde wiskundige verdeling om deze
+berekeningen te maken, waarbij rekening wordt gehouden met de kenmerken
+van de dataset en de manier waarop de monsters zijn verzameld. P-waarden
+worden aangepast om rekening te houden met het feit dat er veel
+vergelijkingen worden gemaakt, zodat we alleen de meest betrouwbare
+resultaten krijgen.
+
+Als we de resultaten hebben, voegen we de namen van de genen toe om te
+zien welke genen anders zijn. Dan worden de resultaten gesorteerd op
+p-waarden en veranderingen in expressie, zodat de meest betekenisvolle
+genen bovenaan staan. Hierdoor krijgen we een duidelijk beeld van welke
+genen waarschijnlijk anders tot expressie komen tussen de groepen.
+
+# Deelopdracht 5
+
+## Visualisatie van DGE's
+
+### Voorbereiden data
+
+Eerst moet er extra informatie worden toegevoegd om de resulaten van de
+DGE-analyse duidelijker te visualiseren.
+
+```{r echo=TRUE}
+res_df <- left_join(res_df, featuredata[, c("ensembl_gene_id", "external_gene_id")], by = c("Gene" = "ensembl_gene_id"))
+names(res_df)[names(res_df) == "external_gene_id"] <- "GeneSymbol"
+normalized_counts_df <- as.data.frame(normalized_counts)
+normalized_counts_df$Gene <- rownames(normalized_counts_df)
+normalized_counts_df <- left_join(normalized_counts_df, featuredata[, c("ensembl_gene_id", "external_gene_id")], by = c("Gene" = "ensembl_gene_id"))
+names(normalized_counts_df)[names(normalized_counts_df) == "external_gene_id"] <- "GeneSymbol"
+```
+
+### Plot met aantal DEGs
+
+De barplot toont het aantal differentieel tot expressie gebrachte genen
+(DEGs) bij verschillende p-waarde en log2FoldChange drempels. We zien
+dat naarmate de drempels strenger worden (lagere p-waarde en hogere
+log2FoldChange), het aantal significante DEGs afneemt. Dit helpt ons te
+begrijpen hoe streng onze criteria voor differentiële genexpressie zijn.
+
+```{r echo=FALSE}
+padj_cutoffs <- c(0.01, 0.05, 0.1)
+log2fc_cutoffs <- c(0, 1, 2)
+
+deg_counts <- expand.grid(padj_cutoff = padj_cutoffs, log2fc_cutoff = log2fc_cutoffs)
+deg_counts$count <- apply(deg_counts, 1, function(row) {
+  sum(res_df$padj < row['padj_cutoff'] & abs(res_df$log2FoldChange) > row['log2fc_cutoff'], na.rm = TRUE)
+})
+
+ggplot(deg_counts, aes(x = factor(log2fc_cutoff), y = count, fill = factor(padj_cutoff))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Aantal DEGs bij verschillende padj en log2FoldChange drempels",
+       x = "log2 Fold Change drempel",
+       y = "Aantal DEGs",
+       fill = "padj drempel") +
+  theme_minimal()
+```
+
+### Volcano plot
+
+De volcano plot visualiseert de DEGs op basis van hun log2FoldChange en
+p-waarde. Genen met een hoge log2FoldChange (hoger dan 1) en een lage
+padj-waarde (kleiner dan 0,05) worden rood gemarkeerd. Dit maakt het
+eenvoudig om de meest relevante DEGs te identificeren. Hierbij zien we
+dat de genen NR4A1 en S100A7A ver van het cluster zijn. Dat betekent dus
+dat deze genen best wel significant tot expressie zijn gekomen.
+
+```{r echo=FALSE}
+res_df$Outlier <- with(res_df, padj < 0.05 & abs(log2FoldChange) > 1)
+ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(aes(color = Outlier), alpha = 0.5) +
+  scale_color_manual(values = c("gray", "red")) +
+  geom_text_repel(data = subset(res_df, Outlier), 
+                  aes(label = GeneSymbol), 
+                  size = 3, 
+                  max.overlaps = 4) +
+  labs(title = "Volcano Plot van DEGs",
+       x = "log2 Fold Change",
+       y = "-log10(padj)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+### Heatmap
+
+De heatmap in visualiseert de expressieniveaus van de top 30 DEGs over
+alle samples. De top 30 wordt bepaald door de eerste 30 genen van de
+gesoorteerde DGE-lijst (zie deelopdracht 4) te gebruiken. De
+kleurgradaties geven de genexpressieniveaus aan, waarbij genen die hoger
+tot expressie komen in een bepaalde conditie zich onderscheiden door hun
+kleurpatroon. Een blauwere kleur betekent een lagere genexpressie en een
+rodere kleur betekent hogere expressie. We zien een heel mooi verschil
+in expressie tussen voor en na. Wat opvalt is dat de 5e sample (sample
+X16_2677_S) een hele sterke expressie heeft in de genen C1orf95,
+S100A7A, MUC5B en SHROOM1. Het lijkt erop dat deze genen alleen zijn
+gekozen als top 30 DEGs, omdat deze sample ze hoog in expressie heeft.
+Want de alle andere samples lijken een ongeveer zelfde expressie te
+hebben op deze genen.
+
+```{r echo=FALSE}
+top_degs <- head(res_df[order(res_df$padj), ], 30)$GeneSymbol
+top_counts <- subset(normalized_counts_df, GeneSymbol %in% top_degs)
+rownames(top_counts) <- top_counts$GeneSymbol
+top_counts <- subset(top_counts, select = -c(Gene, GeneSymbol))
+annotation <- data.frame(voor.na = metadata$voor.na)
+rownames(annotation) <- rownames(metadata)
+pheatmap(top_counts, 
+         annotation_col = annotation, 
+         show_rownames = TRUE, 
+         show_colnames = TRUE,  
+         scale = "row",
+         clustering_distance_rows = "correlation",
+         clustering_distance_cols = "correlation",
+         main = "Heatmap van Top 30 DEGs")
+```
+
+### Verspreiding van counts per top30 gen
+
+Deze scatterplot is gemaakt om, onder andere, de opvallendheden uit de
+heatmap te verduidelijken. We zien dat de genen MUC5B en SHROOM1 wel
+hele duidelijke outliers hebben, maar de andere samples van de genen
+liggen wel op hetzelfde patroon. Bij beide genen zien we dat de samples
+na de behandeling een hogere count hebben dan de samples voor de
+behandeling. Dus ondanks de outliers, is het wel nog bruikbare data. Dit
+is wel alvast een puntje voor een vervolgonderzoek: Toch de outliers
+verwijderen bij DGE-analyse.
+
+```{r echo=FALSE}
+melted_counts <- top_counts %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(cols = -Gene, names_to = "Sample", values_to = "Count")
+
+metadata <- metadata %>%
+  rownames_to_column("Sample")
+melted_counts <- merge(melted_counts, metadata, by.x = "Sample", by.y = "Sample")
+
+ggplot(melted_counts, aes(x = Gene, y = Count, color = voor.na)) +
+  geom_point(position = position_jitter(width = 0.2, height = 0)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Scatterplot van de verschillende counts per genen uit de top 20 DEGs", x = "Genen", y = "Counts", color = "Conditie")
+```
+
+# Deelopdracht 6
+
+## Functionele analyse
+
+De functionele analyse is met gseGO gedaan op het humane genoom
+(org.Hs.eg.db). De ontology is gezet op Biologisch Proces, omdat we
+geïnteresseerd zijn in het begrijpen en analyseren van de biologische
+gebeurtenissen die betrokken zijn bij de behandeling van borstkanker. De
+minGSSize is gezet op 5 en de maxGSSize op 500 omdat deze settings met
+regelmaat terug te vinden zijn in de literatuur. Ook om deze reden is de
+pvalue-cutoff op 0,5 ingesteld.
+
+```{r echo=TRUE}
+ranks <- res_df$log2FoldChange
+names(ranks) <- res_df$GeneSymbol
+ranks <- sort(ranks, decreasing = T)
+ego <- gseGO(
+  geneList = ranks,
+  OrgDb = org.Hs.eg.db,
+  ont = "BP",
+  keyType = "SYMBOL",
+  minGSSize = 5,
+  maxGSSize = 500,
+  pvalueCutoff = 0.5,
+  verbose = FALSE,
+  by = "fgsea"
+)
+```
+
+In onderstaande plot zien we de top 20 pathways. Om specifieker te zijn:
+de top 10 pathways met de hoogste enrichmentScore en de top 10 pathways
+met de laagste enrichmentScore. Dit betekent dus 10 pathways die
+verhoogd zijn in expressie en 10 pathways die juist verlaagd zijn in
+expressie. Als we kijken naar de resultaten, zien we een paar
+interessante dingen. We zien pathways met betrekking tot mitose, we zien
+patwhays met biogenese en we zien ook een pathway met betrekking tot
+zure smaak.
+
+```{r echo=FALSE}
+ego_df <- as.data.frame(ego)
+topUp <- ego_df %>% 
+  filter(enrichmentScore > 0) %>% 
+  top_n(10, wt=-p.adjust)
+topDown <- ego_df %>% 
+  filter(enrichmentScore < 0) %>% 
+  top_n(10, wt=-p.adjust)
+topPathways <- bind_rows(topUp, topDown) %>% 
+  arrange(-enrichmentScore)
+
+ggplot(topPathways, aes(x = Description, y = enrichmentScore)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pathways met hun enrichmentScores",
+       x = "Pathways",
+       y = "enrichmentScores") +
+  coord_flip()
+```
