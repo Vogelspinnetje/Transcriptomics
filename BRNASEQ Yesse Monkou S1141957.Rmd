@@ -199,20 +199,16 @@ boxplot(log2(countdata + 1), las=2,
 
 log_counts <- log2(countdata + 1)
 
-# Kleuren voor de samples
 colors <- rainbow(ncol(log_counts))
 
-# Eerste sample plotten
 plot(density(log_counts[,1]), col=colors[1], lwd=2,
      main="Density plots van genexpressie per sample",
      xlab="log2(counts + 1)", ylim=c(0, 0.25))
 
-# Andere samples toevoegen
 for(i in 2:ncol(log_counts)){
   lines(density(log_counts[,i]), col=colors[i], lwd=2)
 }
 
-# Legenda
 legend("topright", legend=colnames(log_counts), col=colors, lwd=2, cex=0.7)
 ```
 
@@ -226,9 +222,9 @@ Er hoeft dus ook geen strategie hiervoor bedacht te worden.
 ### Outliers
 
 Het onderzoek gaat over het verschil in expressie van genen. Hierbij
-worden extreme waardes juist gewaardeerd, want daardoor kan
-differentiatie worden aangetoond. Op deze grond is ervoor gekozen om
-niks te doen met vermeende outliers.
+kunnen hoge waardes interessant zijn, maar outliers worden niet getolereerd.
+Voor deze dataset wordt geconcludeerd dat DESeq voldoende is om de outliers te 
+bestrijden.
 
 ### Filtering van ruis
 
@@ -281,15 +277,26 @@ dge <- calcNormFactors(dge, method = "TMM")
 normalized_counts <- cpm(dge, normalized.lib.sizes = TRUE)
 ```
 
-En dan ziet de som van de counts er als volgt uit:
+En dan zien de counts er zo uit:
 
 ```{r echo=FALSE}
-barplot(apply(normalized_counts, 2, sum), 
-        las=2, 
-        main="Som van genormaliseerde counts per sample", 
-        ylab="Totale reads", 
-        xlab="Patiënt",
-        col = "skyblue")
+boxplot(log2(normalized_counts + 1), las=2,
+        main="Boxplot van genormaliseerde genexpressie per sample",
+        ylab="log2(counts + 1)")
+
+log_counts <- log2(normalized_counts + 1)
+
+colors <- rainbow(ncol(log_counts))
+
+plot(density(log_counts[,1]), col=colors[1], lwd=2,
+     main="Density plots van genormaliseerde genexpressie per sample",
+     xlab="log2(counts + 1)", ylim=c(0, 0.25))
+
+for(i in 2:ncol(log_counts)){
+  lines(density(log_counts[,i]), col=colors[i], lwd=2)
+}
+
+legend("topright", legend=colnames(log_counts), col=colors, lwd=2, cex=0.7)
 
 ```
 
@@ -300,7 +307,9 @@ zijn die overduidelijk buiten de clusters vallen. X29_3001_B en X2_97_S
 zijn de StudyID’s van deze punten. Als er meer samples waren, zouden
 deze twee losse samples wellicht verwijderd kunnen worden. Maar omdat er
 maar beperkt aantal samples beschikbaar zijn, wordt er toch voor gekozen
-deze samples te behouden.
+deze samples te behouden. Wat voor de rest natuurlijk op valt, is dat de "voor" 
+en "na" data allebei in hetzelfde cluster zitten (op die twee eerder genoemde
+datapunten na).
 
 ```{r echo=FALSE}
 tmm_counts <- log(normalized_counts + 1)
