@@ -147,6 +147,8 @@ Het ensembl_gene_id geeft, zoals de naam al zegt, het ensembl gen-id
 weer. De andere kolommen geven het aantal reads van een gen per sample
 weer.
 
+------------------------------------------------------------------------
+
 ```{r echo=FALSE}
 kable(head(featuredata), caption = "Eerste 6 regels van featuredata.txt tabel")
 ```
@@ -156,20 +158,20 @@ countdata9 tabel. Het gaat hier om het type gen, chromosoomnummer,
 begin- en eindpositie op het humane genoom, het gensymbool en een korte
 beschrijving van het gen.
 
+------------------------------------------------------------------------
+
 ```{r echo=FALSE}
 kable(metadata, caption = "Metadata9.txt tabel")
 ```
 
 In deze tabel krijgen we informatie over de conditie van de samples. De
 twee onafhankelijke variabelen zijn voor.na en type. In deze dataset
-hebben alle samples dezelfde type borstkanker. Er zijn vier samples
+hebben alle samples dus dezelfde type borstkanker. Er zijn vier samples
 genomen voor behandeling een vier samples na behandeling.
 
 ## Experimenteel Design
 
-Zoals getoond zitten de onafhankelijke variabelen in metadata9.txt. Het
-gaat hier om de kolom voor.na die als enige verschil toont. Daarom wordt
-dit ook de conditie in het experimenteel design.
+Zoals getoond zitten de onafhankelijke variabelen in metadata9.txt. Het gaat hier om de kolom voor.na die als enige verschil toont. Daarom wordt dit ook de conditie in het experimenteel design.
 
 ```{r echo=FALSE}
 metadata_ed <- metadata[, !names(metadata) %in% "type"]
@@ -191,12 +193,27 @@ logische verklaring is technische variatie. En dit wordt verholpen door
 middel van normalisatie.
 
 ```{r echo=FALSE}
-barplot(apply(countdata, 2, sum), 
-        las=2, 
-        main="Som van counts per sample", 
-        ylab="Totale reads", 
-        xlab="Sample",
-        col = "skyblue")
+boxplot(log2(countdata + 1), las=2,
+        main="Boxplot van genexpressie per sample",
+        ylab="log2(counts + 1)")
+
+log_counts <- log2(countdata + 1)
+
+# Kleuren voor de samples
+colors <- rainbow(ncol(log_counts))
+
+# Eerste sample plotten
+plot(density(log_counts[,1]), col=colors[1], lwd=2,
+     main="Density plots van genexpressie per sample",
+     xlab="log2(counts + 1)", ylim=c(0, 0.25))
+
+# Andere samples toevoegen
+for(i in 2:ncol(log_counts)){
+  lines(density(log_counts[,i]), col=colors[i], lwd=2)
+}
+
+# Legenda
+legend("topright", legend=colnames(log_counts), col=colors, lwd=2, cex=0.7)
 ```
 
 ## Data opschonen
